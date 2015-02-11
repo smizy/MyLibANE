@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="ANE Build Script" default="package ane">
+
+    <property environment="env"/>
+
+    <!-- Configuration files: -->
+    <property file="local.properties"/>
+    <property file="build.properties"/>
+
+         <!-- Add property definitions here -->
+
+<!-- Building of the projects and gathering of the files for packaging an ANE  happens in a temporary folder structure, which is cleaned up at the end: -->
+<property name="tempdir" value="/tmp/build_ane"/>
+<property name="iOS.project.outputdir" value="${tempdir}/ios"/>
+<property name="temp.packagedir" value="${tempdir}/package"/>
+
+    <!-- Add build targets here -->
+
+<!-- ************************************************************ 
+         Helper targets
+     ************************************************************ -->
+<!-- Set up the build type: debug or release -->
+<target name="set build type" depends="check debug, check release">
+</target> 
+
+<target name="check debug" if="${build.debug}" depends="check release" description="Check if ${debug} is true and if it is, set the properties below for a debug build">
+    <!-- iOS.library.build.type defines the folder where our iOS library will be, depending ont the build -->
+    <!-- You can set up similar properties for Windows and Mac OS. You don’t need one for Android. -->
+    <property name="iOS.library.build.type" value="Debug"/>
+</target> 
+
+<target name="check release" unless="${build.debug}" description="Check if ${debug} is false and if it is, set the properties below for a release build">
+    <!-- iOS.library.build.type defines the folder where our iOS library will be, depending ont the build -->
+    <!-- You can set up similar properties for Windows and Mac OS. You don’t need one for Android. -->
+    <property name="iOS.library.build.type" value="Release"/>
+</target>
+
+<!-- ************************************************************ 
+     Native Library Targets
+     ************************************************************ -->
+<!-- Clean the Xcode project -->
+<target name="clean ios" depends="set build type" description="Clean the iOS Library">
+    <exec executable="xcodebuild" failonerror="true" dir="${iOS.project.root}">
+        <arg line="clean -configuration ${iOS.library.build.type}"/>
+    </exec>
+</target>
+
+
+<!-- Build the XCode project -->
+<target name="build ios" depends="set build type" description="Build the iOS Library">
+    <property name="iOS.project.builddir" value="${iOS.project.buildroot}/build"/>
+        <exec executable="xcodebuild" failonerror="true" dir="${iOS.project.root}">
+            <arg line="-project ${iOS.project.name}.xcodeproj
+                       -target ${iOS.project.name}
+                       -configuration ${iOS.library.build.type}
+                       SYMROOT=${iOS.project.builddir}"
+            /> 
+            <!-- Note: the SYMROOT path is relative to {dir}. -->
+        </exec>
+        <copy file="${iOS.project.builddir}/${iOS.library.build.type}-iphoneos/${iOS.library}" todir="${iOS.project.outputdir}" overwrite="true"/>
+</target>
+
+<!-- Rebuild the XCode project -->
+<target name="rebuild ios" depends="clean ios,build ios" description="Do a clean build of the XCode project"/>
+
+ <!-- ************************************************************
+      Adobe AIR Library Generic Targets
+     ************************************************************ -->
+<!-- Generic target: it builds the AIR library that {library.name} and {library.root} point to. -->
+<target name="build swc" description="Build an AIR library SWC file">
+    <fileset dir="${library.root}/src" casesensitive="yes" id="classfiles">
+        <include name="**/*.as"/>
+    </fileset>
+    <pathconvert property="classlist" refid="classfiles" pathsep=" " dirsep=".">
+        <regexpmapper from=".*src.(.*)\.as" to="\1"/>
+    </pathconvert>
+    <exec executable="${COMPC}" failonerror="true">
+        <arg line="+configname=airmobile 
+                   -source-path ${library.root}/src
+                   -output ${library.outputdir}/${library.name}.swc
+                   -swf-version 14
+                   -include-classes ${classlist}"
+        /> 
+    </exec>
+</target>
+
+ <!-- This is a generic target, which works with the AIR library that {library.name} is set to. -->
+<target name="extract swf library" depends="build swc" description="Extract library.swf from the SWC file">
+    <property name="library.extractdir" value="${library.outputdir}/content"/>
+    <mkdir dir="${library.extractdir}"/>
+    <unzip src="${library.outputdir}/${library.name}.swc" dest="${library.extractdir}" overwrite="true"/>
+    <copy file="${library.extractdir}/library.swf" todir="${library.outputdir}" overwrite="true"/>
+    <delete dir="${library.extractdir}"/>
+</target>
+
+<!-- This target sets {library.name} and {library.root} and executes the generic target "build swc" for their values. -->
+<target name="build air library">
+    <subant target="extract swf library">
+        <property name="library.name" value="${air.library.name}"/>
+        <property name="library.root" value="${air.library.root}"/>
+        <property name="library.outputdir"  value="${tempdir}/${air.library.name}/swc"/>
+        <fileset dir="." includes="build.xml"/>
+    </subant>
+    <property name="air.library.outputdir"  value="${tempdir}/${air.library.name}/swc"/>
+</target>
+
+
+<target name="does package dir exist" description="Check if the temporary package folder has already been created" >
+    <available property="temp.packagedir.exists" file="${temp.packagedir}"/>
+</target>
+<target name="create package folder" depends="does package dir exist" unless="temp.packagedir.exists" description="Create temporary folder for the package ingredients">
+    <mkdir  dir="${temp.packagedir}"/>
+</target> 
+
+<!-- Copy all of the files needed for packaging an ANE for iOS: -->
+<target name="copy ios files for packaging" depends="rebuild ios, build air library, create package folder">
+    <copy file="${air.library.sourcedir}/${air.extension.descriptor}" todir="${temp.packagedir}"/>
+    <copy file="${air.library.sourcedir}/${air.platform.descriptor}"  todir="${temp.packagedir}"/>
+    <copy file="${iOS.project.outputdir}/${iOS.library}" todir="${temp.packagedir}"/>
+    <copy file="${air.library.outputdir}/${air.library.name}.swc" todir="${temp.packagedir}"/>
+    <copy file="${air.library.outputdir}/library.swf" todir="${temp.packagedir}"/>
+</target>
+
+<!-- Create the ANE package for iOS -->
+<target name="package ane" depends="copy ios files for packaging" description="Package the extension into an ANE file">
+    <mkdir  dir="${temp.packagedir}/ane"/>
+    <exec executable="${ADT}" failonerror="true" dir="${temp.packagedir}">
+        <arg line="-package 
+                   -target ane ane/${ane.name}.ane
+                   ${air.extension.descriptor} 
+                   -swc ../${air.library.name}/swc/${air.library.name}.swc
+                   -platform iPhone-ARM 
+                   -C . .
+                   -platformoptions ${air.platform.descriptor}"
+        />
+    </exec>
+    <mkdir dir="${ane.destination}"/>
+    <move file="${temp.packagedir}/ane/${ane.name}.ane" todir="${ane.destination}" overwrite="true"/>
+<!--    <delete dir="${tempdir}"/>
+-->
+</target>
+</project>

@@ -1,0 +1,31 @@
+<extension xmlns="http://ns.adobe.com/air/extension/3.1"> 
+    <id>com.example</id> 
+    <versionNumber>1.0.0</versionNumber> 
+    <name> 
+        <text xml:lang="en_US">Hello World</text> 
+        <text xml:lang="ja_JP">こんにちは 世界</text> 
+    </name> 
+    <platforms> 
+    	<!--
+        <platform name="Android-ARM"> 
+            <applicationDeployment> 
+                <nativeLibrary>HelloWorldANE.jar</nativeLibrary> 
+                <initializer>example.ane.android.HelloWorldExtension</initializer> 
+                <finalizer>example.ane.android.HelloWorldExtension</finalizer> 
+            </applicationDeployment> 
+        </platform> 
+    -->
+        <platform name="iPhone-ARM"> 
+            <applicationDeployment> 
+                <nativeLibrary>libMyLibWrapperAir.a</nativeLibrary> 
+                <initializer>ExtInitializer</initializer> 
+                <finalizer>ExtFinalizer</finalizer> 
+            </applicationDeployment> 
+        </platform>
+<!--
+        <platform name="default"> 
+            <applicationDeployment/> 
+        </platform> 
+-->
+    </platforms> 
+</extension>
